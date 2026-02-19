@@ -1,0 +1,23 @@
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+    restart: unless-stopped
+
+  collector:
+    build: ./collector
+    volumes:
+      - ./collector/app:/app/app
+    environment:
+      - MQTT_HOST=${MQTT_HOST}
+      - MQTT_PORT=${MQTT_PORT}
+      - MQTT_TOPIC=${MQTT_TOPIC}
+      # later:
+      # - EC2_INGEST_URL=${EC2_INGEST_URL}
+      # - EC2_TOKEN=${EC2_TOKEN}
+    depends_on:
+      - mosquitto
+    restart: unless-stopped
