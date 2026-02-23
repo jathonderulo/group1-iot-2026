@@ -1,0 +1,23 @@
+services:
+  java-gateway:
+    build:
+      context: .
+      dockerfile: java-gateway/Dockerfile
+    environment:
+      - LISTEN_PORT=${LISTEN_PORT:?LISTEN_PORT is required for e2e}
+      - EC2_HOST=${EC2_HOST:?EC2_HOST is required for e2e}
+      - EC2_PORT=${EC2_PORT:?EC2_PORT is required for e2e}
+    depends_on:
+      - mock-ec2
+    restart: unless-stopped
+
+  mock-ec2:
+    build: ./mock-ec2
+    restart: unless-stopped
+
+  collector:
+    environment:
+      - EC2_INGEST_URL=${EC2_INGEST_URL:?EC2_INGEST_URL is required for e2e}
+    depends_on:
+      - mosquitto
+      - java-gateway

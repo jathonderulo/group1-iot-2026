@@ -5,9 +5,9 @@ import java.util.concurrent.Executors;
 
 public class SimpleJavaGateway {
     
-    private static final int LISTEN_PORT = 9090;
-    private static final String EC2_IP = "13.62.52.84"; //  EC2 IP. Now this changes every time I shut it down so i need to deal with this? Look into Elastic IPs? Maybe :-)
-    private static final int EC2_PORT = 8080;
+    private static final int LISTEN_PORT = getEnvInt("LISTEN_PORT", 9090);
+    private static final String EC2_HOST = getRequiredEnv("EC2_HOST");
+    private static final int EC2_PORT = getEnvInt("EC2_PORT", 8080);
     private static final int THREAD_POOL_SIZE = 10;
     
     public static void main(String[] args) {
@@ -20,7 +20,7 @@ public class SimpleJavaGateway {
         try (ServerSocket serverSocket = new ServerSocket(LISTEN_PORT)) {
             System.out.println(" Java Gateway running on port " + LISTEN_PORT);
             System.out.println(" Listening for curl requests on http://localhost:" + LISTEN_PORT);
-            System.out.println(" Forwarding to EC2 at " + EC2_IP + ":" + EC2_PORT);
+            System.out.println(" Forwarding to EC2 at " + EC2_HOST + ":" + EC2_PORT);
             System.out.println("\n Open a new terminal and try:");
             System.out.println("   curl http://localhost:" + LISTEN_PORT + "/");
             System.out.println("   curl http://localhost:" + LISTEN_PORT + "/api");
@@ -61,7 +61,7 @@ public class SimpleJavaGateway {
                 OutputStream clientOut = clientSocket.getOutputStream();
                 
                 // Connect to EC2
-                ec2Socket = new Socket(EC2_IP, EC2_PORT);
+                ec2Socket = new Socket(EC2_HOST, EC2_PORT);
                 ec2Socket.setSoTimeout(5000); // 5 second timeout on EC2 socket
                 
                 InputStream ec2In = ec2Socket.getInputStream();
@@ -120,6 +120,34 @@ public class SimpleJavaGateway {
             }
             
             return buffer.toByteArray();
+        }
+    }
+
+    private static String getEnv(String key, String defaultValue) {
+        String value = System.getenv(key);
+        if (value == null || value.isBlank()) {
+            return defaultValue;
+        }
+        return value;
+    }
+
+    private static String getRequiredEnv(String key) {
+        String value = System.getenv(key);
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException("Missing required environment variable: " + key);
+        }
+        return value;
+    }
+
+    private static int getEnvInt(String key, int defaultValue) {
+        String value = System.getenv(key);
+        if (value == null || value.isBlank()) {
+            return defaultValue;
+        }
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException ignored) {
+            return defaultValue;
         }
     }
 }

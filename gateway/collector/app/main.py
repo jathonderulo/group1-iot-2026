@@ -3,10 +3,11 @@ import os
 import time
 from typing import Any, Dict, Optional
 import paho.mqtt.client as mqtt
+import requests
 
-MQTT_HOST = os.getenv("MQTT_HOST")
-MQTT_PORT = int(os.getenv("MQTT_PORT"))
-MQTT_TOPIC = os.getenv("MQTT_TOPIC")
+MQTT_HOST = os.getenv("MQTT_HOST", "mosquitto")
+MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+MQTT_TOPIC = os.getenv("MQTT_TOPIC", "desks/+/state")
 
 # Optional: forward to EC2 later
 EC2_INGEST_URL = os.getenv("EC2_INGEST_URL")
@@ -73,9 +74,25 @@ def on_message(client: mqtt.Client, userdata, msg: mqtt.MQTTMessage):
 
     print(f"[collector] OK topic={topic} payload={payload}")
 
-    # Later: forward to EC2 / Supabase
-    # if EC2_INGEST_URL:
-    #     forward_to_ec2(payload)
+    if EC2_INGEST_URL:
+        forward_to_ec2(topic, payload)
+
+
+def forward_to_ec2(topic: str, payload: Dict[str, Any]) -> None:
+    envelope = {
+        "topic": topic,
+        "payload": payload,
+    }
+
+    headers = {"Content-Type": "application/json"}
+    if EC2_TOKEN:
+        headers["Authorization"] = f"Bearer {EC2_TOKEN}"
+
+    try:
+        resp = requests.post(EC2_INGEST_URL, json=envelope, headers=headers, timeout=5)
+        print(f"[collector] Forwarded to EC2 status={resp.status_code} url={EC2_INGEST_URL}")
+    except requests.RequestException as err:
+        print(f"[collector] Forward failed url={EC2_INGEST_URL} error={err}")
 
 
 def main():
