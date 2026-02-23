@@ -3,7 +3,7 @@ param(
     [int]$LogTail = 200
 )
 
-Write-Host "Running gateway end-to-end test (broker -> collector -> java-gateway -> mock-ec2)..."
+Write-Host "Running gateway end-to-end test (broker -> collector -> forwarder -> mock-ec2)..."
 
 Set-Location "$PSScriptRoot/.."
 Set-Location ".."
@@ -30,7 +30,7 @@ try {
     for ($i = 0; $i -lt 10; $i++) {
         Start-Sleep -Seconds 2
         $collectorLogs = docker compose @composeArgs logs collector
-        $javaLogs = docker compose @composeArgs logs java-gateway
+        $javaLogs = docker compose @composeArgs logs forwarder
         $mockLogs = docker compose @composeArgs logs mock-ec2
 
         $collectorOk = $collectorLogs | Select-String -Pattern "Forwarded to EC2 status=200"
@@ -43,21 +43,21 @@ try {
     }
 
     if (-not $collectorOk) {
-        throw "Collector did not forward successfully. Check collector logs."
+        throw "Collector did not forward successfully. Check collector service logs."
     }
     if (-not $javaOk) {
-        throw "Java gateway did not proxy request. Check java-gateway logs."
+        throw "Forwarder did not proxy request. Check forwarder service logs."
     }
     if (-not $mockOk) {
         throw "Mock EC2 did not receive ingest request. Check mock-ec2 logs."
     }
 
     Write-Host ""
-    Write-Host "----- collector logs -----"
+    Write-Host "----- collector service logs -----"
     docker compose @composeArgs logs --tail $LogTail collector
     Write-Host ""
-    Write-Host "----- java-gateway logs -----"
-    docker compose @composeArgs logs --tail $LogTail java-gateway
+    Write-Host "----- forwarder service logs -----"
+    docker compose @composeArgs logs --tail $LogTail forwarder
     Write-Host ""
     Write-Host "----- mock-ec2 logs -----"
     docker compose @composeArgs logs --tail $LogTail mock-ec2
@@ -66,11 +66,11 @@ try {
 }
 catch {
     Write-Host ""
-    Write-Host "----- collector logs -----"
+    Write-Host "----- collector service logs -----"
     docker compose @composeArgs logs --tail $LogTail collector
     Write-Host ""
-    Write-Host "----- java-gateway logs -----"
-    docker compose @composeArgs logs --tail $LogTail java-gateway
+    Write-Host "----- forwarder service logs -----"
+    docker compose @composeArgs logs --tail $LogTail forwarder
     Write-Host ""
     Write-Host "----- mock-ec2 logs -----"
     docker compose @composeArgs logs --tail $LogTail mock-ec2

@@ -1,0 +1,39 @@
+services:
+  mosquitto:
+    image: ${MOSQUITTO_IMAGE}
+    ports:
+      - "${MQTT_HOST_PORT}:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto_data:/mosquitto/data
+    restart: unless-stopped
+
+  forwarder:
+    build:
+      context: .
+      dockerfile: forwarder/Dockerfile
+    environment:
+      - LISTEN_PORT=${LISTEN_PORT:?LISTEN_PORT is required}
+      - EC2_HOST=${EC2_HOST:?EC2_HOST is required}
+      - EC2_PORT=${EC2_PORT:?EC2_PORT is required}
+    depends_on:
+      - mosquitto
+    restart: unless-stopped
+
+  collector:
+    build: ./collector
+    environment:
+      - MQTT_HOST=${MQTT_HOST:?MQTT_HOST is required}
+      - MQTT_PORT=${MQTT_PORT:?MQTT_PORT is required}
+      - MQTT_TOPIC=${MQTT_TOPIC:?MQTT_TOPIC is required}
+      - EC2_INGEST_URL=${EC2_INGEST_URL:?EC2_INGEST_URL is required}
+      - EC2_TOKEN=${EC2_TOKEN:?EC2_TOKEN is required}
+    depends_on:
+      - mosquitto
+      - forwarder
+    restart: unless-stopped
+
+volumes:
+  mosquitto_data:
+
+# docker compose -f docker-compose.prod.yml up -d --build

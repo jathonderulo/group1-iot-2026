@@ -1,8 +1,8 @@
 services:
-  java-gateway:
+  forwarder:
     build:
       context: .
-      dockerfile: java-gateway/Dockerfile
+      dockerfile: forwarder/Dockerfile
     environment:
       - LISTEN_PORT=${LISTEN_PORT:?LISTEN_PORT is required for e2e}
       - EC2_HOST=${EC2_HOST:?EC2_HOST is required for e2e}
@@ -20,4 +20,4 @@ services:
       - EC2_INGEST_URL=${EC2_INGEST_URL:?EC2_INGEST_URL is required for e2e}
     depends_on:
       - mosquitto
-      - java-gateway
+      - forwarder

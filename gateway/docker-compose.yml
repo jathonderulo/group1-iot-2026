@@ -16,7 +16,6 @@ services:
       - MQTT_PORT=${MQTT_PORT}
       - MQTT_TOPIC=${MQTT_TOPIC}
       - EC2_INGEST_URL=${EC2_INGEST_URL:-}
-      - EC2_TOKEN=${EC2_TOKEN:-}
     depends_on:
       - mosquitto
     restart: unless-stopped

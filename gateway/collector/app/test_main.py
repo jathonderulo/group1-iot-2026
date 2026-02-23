@@ -18,7 +18,7 @@ class CollectorTests(unittest.TestCase):
 
     @patch("main.requests.post")
     def test_forward_to_ec2_posts_envelope(self, mock_post):
-        main.EC2_INGEST_URL = "http://java-gateway:9090/ingest"
+        main.EC2_INGEST_URL = "http://forwarder:9090/ingest"
         main.EC2_TOKEN = "token"
         mock_post.return_value.status_code = 200
 
