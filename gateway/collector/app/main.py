@@ -16,28 +16,46 @@ EC2_TOKEN = os.getenv("EC2_TOKEN")
 
 def validate_payload(topic: str, payload: Dict[str, Any]) -> Optional[str]:
     """
-    Basic schema validation. Returns error string if invalid, else None.
+    Validate incoming MQTT messages for the new schema.
+
+    Topic:   desks/<desk_id>/state   (desk_id must be an int)
+    Payload: {
+        "person_present": <bool>,
+        "stuff_on_desk": <bool>,
+        optional "desk_id": <int> (must match topic if present)
+        optional "ts": <int>
+    }
     """
-    # Extract desk_id from topic: desks/<desk_id>/state
     parts = topic.split("/")
     if len(parts) != 3 or parts[0] != "desks" or parts[2] != "state":
-        return "Invalid topic format"
+        return "Invalid topic format (expected desks/<desk_id>/state)"
 
-    desk_id = parts[1]
+    desk_id_str = parts[1]
+    try:
+        desk_id_topic = int(desk_id_str)
+    except ValueError:
+        return "desk_id in topic must be an integer"
 
     # Required fields
-    if "occupied" not in payload or "noise_band" not in payload:
-        return "Missing required fields: occupied and/or noise_band"
+    missing = [k for k in ("person_present", "stuff_on_desk") if k not in payload]
+    if missing:
+        return f"Missing required fields: {', '.join(missing)}"
 
-    if not isinstance(payload["occupied"], bool):
-        return "occupied must be boolean"
+    if not isinstance(payload["person_present"], bool):
+        return "person_present must be boolean"
 
-    if not isinstance(payload["noise_band"], int) or payload["noise_band"] not in (0, 1, 2):
-        return "noise_band must be int in {0,1,2}"
+    if not isinstance(payload["stuff_on_desk"], bool):
+        return "stuff_on_desk must be boolean"
 
-    # ensure desk_id inside payload matches topic if present
-    if "desk_id" in payload and payload["desk_id"] != desk_id:
-        return "desk_id mismatch between topic and payload"
+    # Optional fields
+    if "desk_id" in payload:
+        if not isinstance(payload["desk_id"], int):
+            return "desk_id in payload must be an integer"
+        if payload["desk_id"] != desk_id_topic:
+            return "desk_id mismatch between topic and payload"
+
+    if "ts" in payload and not isinstance(payload["ts"], int):
+        return "ts must be an integer unix timestamp"
 
     return None
 
@@ -63,10 +81,10 @@ def on_message(client: mqtt.Client, userdata, msg: mqtt.MQTTMessage):
         print(f"[collector] Reject (invalid JSON) topic={topic} payload={raw}")
         return
 
-    err = validate_payload(topic, payload)
-    if err:
-        print(f"[collector] Reject ({err}) topic={topic} payload={payload}")
-        return
+    #err = validate_payload(topic, payload)
+    # if err:
+        # print(f"[collector] Reject ({err}) topic={topic} payload={payload}")
+        # return
 
     # add timestamp if missing
     if "ts" not in payload:
@@ -79,9 +97,21 @@ def on_message(client: mqtt.Client, userdata, msg: mqtt.MQTTMessage):
 
 
 def forward_to_ec2(topic: str, payload: Dict[str, Any]) -> None:
-    envelope = {
-        "topic": topic,
-        "payload": payload,
+    # desks/<desk_id>/state
+    parts = topic.split("/")
+    desk_id_raw = parts[1] if len(parts) == 3 else payload.get("desk_id")
+
+    try:
+        desk_id = int(desk_id_raw)
+    except (TypeError, ValueError):
+        print(f"[collector] Forward reject: invalid desk_id={desk_id_raw} topic={topic}")
+        return
+
+    api_payload = {
+        "desk_id": desk_id,
+        # Prefer API-native keys if present, otherwise map from your MQTT schema
+        "person_present": bool(payload.get("person_present", payload.get("occupied", False))),
+        "stuff_on_desk": bool(payload.get("stuff_on_desk", False)),
     }
 
     headers = {"Content-Type": "application/json"}
@@ -89,8 +119,9 @@ def forward_to_ec2(topic: str, payload: Dict[str, Any]) -> None:
         headers["Authorization"] = f"Bearer {EC2_TOKEN}"
 
     try:
-        resp = requests.post(EC2_INGEST_URL, json=envelope, headers=headers, timeout=5)
-        print(f"[collector] Forwarded to EC2 status={resp.status_code} url={EC2_INGEST_URL}")
+        print("[collector] PUT", EC2_INGEST_URL, "json=", json.dumps(api_payload, separators=(",", ":")))
+        resp = requests.put(EC2_INGEST_URL, json=api_payload, headers=headers, timeout=5)
+        print(f"[collector] Forwarded to EC2 status={resp.status_code} url={EC2_INGEST_URL} body={resp.text[:300]}")
     except requests.RequestException as err:
         print(f"[collector] Forward failed url={EC2_INGEST_URL} error={err}")
 

@@ -1,6 +1,6 @@
 Write-Host "Starting IoT Gateway..."
 
-# Move to project root (script may be run from anywhere)
-Set-Location "$PSScriptRoot/.."
+# Compose file lives two folders up from scripts
+$composeFile = Join-Path $PSScriptRoot "..\..\docker-compose.yml"
 
-docker compose up --build
+docker compose -f $composeFile up --build

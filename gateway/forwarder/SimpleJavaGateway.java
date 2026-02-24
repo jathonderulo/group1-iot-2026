@@ -1,5 +1,19 @@
-import java.io.*;
-import java.net.*;
+import com.sun.net.httpserver.Headers;
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -9,6 +23,8 @@ public class SimpleJavaGateway {
     private static final String EC2_HOST = getRequiredEnv("EC2_HOST");
     private static final int EC2_PORT = getEnvInt("EC2_PORT", 8080);
     private static final int THREAD_POOL_SIZE = 10;
+    private static final String UPSTREAM_SCHEME = getEnv("UPSTREAM_SCHEME", "http");
+    private static final String MAP_INGEST_TO = getEnv("MAP_INGEST_TO", ""); // set empty to disable
     
     public static void main(String[] args) {
         new SimpleJavaGateway().start();
@@ -16,111 +32,146 @@ public class SimpleJavaGateway {
     
     public void start() {
         ExecutorService threadPool = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
-        
-        try (ServerSocket serverSocket = new ServerSocket(LISTEN_PORT)) {
+        HttpClient httpClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(5))
+                .build();
+
+        try {
+            HttpServer server = HttpServer.create(new InetSocketAddress(LISTEN_PORT), 0);
+            server.createContext("/", exchange -> handleExchange(exchange, httpClient));
+            server.setExecutor(threadPool);
+            server.start();
+
             System.out.println(" Java Gateway running on port " + LISTEN_PORT);
-            System.out.println(" Listening for curl requests on http://localhost:" + LISTEN_PORT);
-            System.out.println(" Forwarding to EC2 at " + EC2_HOST + ":" + EC2_PORT);
-            System.out.println("\n Open a new terminal and try:");
-            System.out.println("   curl http://localhost:" + LISTEN_PORT + "/");
-            System.out.println("   curl http://localhost:" + LISTEN_PORT + "/api");
-            System.out.println("   curl http://localhost:" + LISTEN_PORT + "/db");
-            System.out.println("-".repeat(50));
-            
-            while (true) {
-                Socket clientSocket = serverSocket.accept();
-                System.out.println("\n Connection from " + clientSocket.getInetAddress());
-                
-                // Handle each client in a thread pool thread
-                threadPool.execute(new GatewayHandler(clientSocket));
+            System.out.println(" Listening on http://0.0.0.0:" + LISTEN_PORT);
+            System.out.println(" Forwarding to upstream at " + UPSTREAM_SCHEME + "://" + EC2_HOST + ":" + EC2_PORT);
+            if (!MAP_INGEST_TO.isBlank()) {
+                System.out.println(" Mapping /ingest -> " + MAP_INGEST_TO);
             }
-            
+            System.out.println("-".repeat(60));
         } catch (IOException e) {
-            System.err.println(" Server error: " + e.getMessage());
-        } finally {
             threadPool.shutdown();
+            throw new RuntimeException("Failed to start gateway: " + e.getMessage(), e);
         }
     }
     
-    private static class GatewayHandler implements Runnable {
-        private final Socket clientSocket;
-        
-        public GatewayHandler(Socket clientSocket) {
-            this.clientSocket = clientSocket;
+    private static void handleExchange(HttpExchange exchange, HttpClient httpClient) throws IOException {
+        String method = exchange.getRequestMethod();
+        URI incomingUri = exchange.getRequestURI();
+        String rawPath = incomingUri.getRawPath();
+        String rawQuery = incomingUri.getRawQuery();
+
+        String upstreamPath = rawPath;
+        if (!MAP_INGEST_TO.isBlank() && "/ingest".equals(rawPath)) {
+            upstreamPath = MAP_INGEST_TO;
         }
-        
-        @Override
-        public void run() {
-            Socket ec2Socket = null;
-            
-            try {
-                // Set timeout on client socket
-                clientSocket.setSoTimeout(5000); // 5 second timeout
-                
-                InputStream clientIn = clientSocket.getInputStream();
-                OutputStream clientOut = clientSocket.getOutputStream();
-                
-                // Connect to EC2
-                ec2Socket = new Socket(EC2_HOST, EC2_PORT);
-                ec2Socket.setSoTimeout(5000); // 5 second timeout on EC2 socket
-                
-                InputStream ec2In = ec2Socket.getInputStream();
-                OutputStream ec2Out = ec2Socket.getOutputStream();
-                
-                // Read the request from client
-                byte[] request = readAllBytes(clientIn);
-                String requestStr = new String(request).split("\r\n")[0];
-                System.out.println(" Request: " + requestStr);
-                
-                // Forward to EC2
-                System.out.println(" Forwarding to EC2...");
-                ec2Out.write(request);
-                ec2Out.flush();
-                
-                // Read response from EC2
-                byte[] response = readAllBytes(ec2In);
-                System.out.println(" Received " + response.length + " bytes from EC2");
-                
-                // Forward back to client
-                clientOut.write(response);
-                clientOut.flush();
-                System.out.println(" Response forwarded to client");
-                
-            } catch (SocketTimeoutException e) {
-                System.err.println(" Timeout: " + e.getMessage());
-            } catch (IOException e) {
-                System.err.println(" Error handling request: " + e.getMessage());
-            } finally {
-                try {
-                    if (ec2Socket != null) ec2Socket.close();
-                    clientSocket.close();
-                } catch (IOException e) {
-                    // Ignore close errors
+
+        URI upstreamUri;
+        try {
+            upstreamUri = new URI(
+                    UPSTREAM_SCHEME,
+                    null,
+                    EC2_HOST,
+                    EC2_PORT,
+                    upstreamPath,
+                    rawQuery,
+                    null
+            );
+        } catch (URISyntaxException e) {
+            sendText(exchange, 500, "Invalid upstream URI: " + e.getMessage());
+            return;
+        }
+
+        byte[] body = readAllBytes(exchange.getRequestBody());
+        System.out.println("[gateway] " + method + " " + rawPath + " -> " + upstreamUri + " bytes=" + body.length);
+
+        HttpRequest.BodyPublisher publisher = body.length == 0
+                ? HttpRequest.BodyPublishers.noBody()
+                : HttpRequest.BodyPublishers.ofByteArray(body);
+
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+                .uri(upstreamUri)
+                .timeout(Duration.ofSeconds(10))
+                .method(method, publisher);
+
+        copyRequestHeaders(exchange.getRequestHeaders(), builder);
+
+        HttpResponse<byte[]> upstreamResp;
+        try {
+            upstreamResp = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            sendText(exchange, 502, "Upstream request interrupted");
+            return;
+        } catch (IOException e) {
+            sendText(exchange, 502, "Upstream request failed: " + e.getMessage());
+            return;
+        }
+
+        Headers outHeaders = exchange.getResponseHeaders();
+        copyResponseHeaders(upstreamResp.headers().map(), outHeaders);
+
+        byte[] respBody = upstreamResp.body() == null ? new byte[0] : upstreamResp.body();
+        exchange.sendResponseHeaders(upstreamResp.statusCode(), respBody.length);
+        try (OutputStream out = exchange.getResponseBody()) {
+            out.write(respBody);
+        } finally {
+            exchange.close();
+        }
+
+        System.out.println("[gateway] <- status=" + upstreamResp.statusCode() + " bytes=" + respBody.length);
+    }
+
+    private static void copyRequestHeaders(Headers in, HttpRequest.Builder out) {
+        for (Map.Entry<String, List<String>> entry : in.entrySet()) {
+            String name = entry.getKey();
+            if (name == null) continue;
+
+            String lower = name.toLowerCase();
+            if (lower.equals("host") || lower.equals("connection") || lower.equals("content-length") ||
+                    lower.equals("transfer-encoding")) {
+                continue;
+            }
+
+            for (String value : entry.getValue()) {
+                if (value != null) {
+                    out.header(name, value);
                 }
             }
         }
-        
-        private byte[] readAllBytes(InputStream inputStream) throws IOException {
-            ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-            byte[] data = new byte[8192];
-            int bytesRead;
-            
-            try {
-                while ((bytesRead = inputStream.read(data)) != -1) {
-                    buffer.write(data, 0, bytesRead);
-                    
-                    // If there's nothing left available, break
-                    if (inputStream.available() == 0) {
-                        break;
-                    }
-                }
-            } catch (SocketTimeoutException e) {
-                // Timeout is fine - we've read what we can
-                System.out.println(" Read timeout - continuing with data received");
+    }
+
+    private static void copyResponseHeaders(Map<String, List<String>> in, Headers out) {
+        for (Map.Entry<String, List<String>> entry : in.entrySet()) {
+            String name = entry.getKey();
+            if (name == null) continue;
+
+            String lower = name.toLowerCase();
+            if (lower.equals("connection") || lower.equals("content-length") || lower.equals("transfer-encoding")) {
+                continue;
             }
-            
-            return buffer.toByteArray();
+
+            for (String value : entry.getValue()) {
+                if (value != null) {
+                    out.add(name, value);
+                }
+            }
         }
+    }
+
+    private static void sendText(HttpExchange exchange, int status, String text) throws IOException {
+        byte[] bytes = text.getBytes();
+        exchange.getResponseHeaders().set("Content-Type", "text/plain; charset=utf-8");
+        exchange.sendResponseHeaders(status, bytes.length);
+        try (OutputStream out = exchange.getResponseBody()) {
+            out.write(bytes);
+        } finally {
+            exchange.close();
+        }
+    }
+
+    private static byte[] readAllBytes(InputStream inputStream) throws IOException {
+        return inputStream.readAllBytes();
     }
 
     private static String getEnv(String key, String defaultValue) {
