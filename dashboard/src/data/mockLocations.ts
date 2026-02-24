@@ -38,6 +38,13 @@ export const desksPerFloor: Record<string, string[]> = {
   "hamilton-1f": ["H1-D1","H1-D2","H1-D3","H1-D4","H1-D5","H1-D6"],
 };
 
+/** Demo desk - functional one */
+export const demoLibrary: Library = { id: "demo", name: "Demo Library" };
+export const demoFloor: Floor = { id: "demo-gf", libraryId: "demo", name: "Ground Floor" };
+export const demoDeskId = "DG-D1";
+
+
+
 export function getFloorsForLibrary(libraryId: string): Floor[] {
   return floors.filter((f) => f.libraryId === libraryId);
 }

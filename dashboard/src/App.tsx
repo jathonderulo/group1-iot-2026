@@ -6,14 +6,21 @@ import LocationSelector from "./components/LocationSelector";
 import DeskFilters from "./components/DeskFilters";
 import DarkModeToggle from "./components/DarkModeToggle";
 import { useMockDeskEvents } from "./hooks/useMockDeskEvents";
+import { useLiveDeskStatus } from "./hooks/useLiveDeskStatus";
 import { useLocationSelection } from "./hooks/useLocationSelection";
 import { useDeskFilters } from "./hooks/useDeskFilters";
 import { useDarkMode } from "./hooks/useDarkMode";
-import { floors } from "./data/mockLocations";
+import { floors, demoFloor } from "./data/mockLocations";
+
+/** All floors for name lookup (mock + demo) */
+const allFloors = [...floors, demoFloor];
 
 function App() {
-  const { getDesksForFloor, lastUpdate, simulationActive, toggleSimulation } =
+  const { getDesksForFloor, lastUpdate: mockLastUpdate, simulationActive, toggleSimulation } =
     useMockDeskEvents();
+
+  // Live demo desk — completely independent of mock system
+  const { demoDesk, lastUpdate: liveLastUpdate } = useLiveDeskStatus();
 
   const {
     selection,
@@ -23,12 +30,17 @@ function App() {
     setFloor,
   } = useLocationSelection();
 
+  const isDemoFloor = selection.floorId === demoFloor.id;
+
+  // Use live update time on demo floor, mock update time otherwise
+  const lastUpdate = isDemoFloor ? liveLastUpdate : mockLastUpdate;
+
   const { dark, toggle: toggleDark } = useDarkMode();
 
-  // Desks for the currently selected floor
+  // On the demo floor show only the live desk; otherwise show mock desks
   const floorDesks = useMemo(
-    () => getDesksForFloor(selection.floorId),
-    [getDesksForFloor, selection.floorId]
+    () => isDemoFloor ? [demoDesk] : getDesksForFloor(selection.floorId),
+    [isDemoFloor, demoDesk, getDesksForFloor, selection.floorId]
   );
 
   const {
@@ -58,7 +70,7 @@ function App() {
 
   // Current floor name for the header
   const currentFloorName =
-    floors.find((f) => f.id === selection.floorId)?.name ?? "Floor";
+    allFloors.find((f) => f.id === selection.floorId)?.name ?? "Floor";
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-800 antialiased dark:bg-gray-900 dark:text-gray-200">

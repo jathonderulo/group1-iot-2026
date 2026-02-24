@@ -1,6 +1,6 @@
 export type NoiseBand = "silent" | "quiet" | "moderate" | "loud";
 
-export type OccupancyStatus = "available" | "occupied" | "unsure";
+export type OccupancyStatus = "available" | "occupied" | "reserved";
 
 export type Library = {
   id: string;
@@ -19,6 +19,6 @@ export type DeskState = {
   status: OccupancyStatus;
   noiseband: NoiseBand;
   occupiedSince?: string;
-  unsureSince?: string;
+  reservedSince?: string;
   lastOccupiedAt?: string;
 };
