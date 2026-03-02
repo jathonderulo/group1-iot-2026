@@ -2,7 +2,18 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   libraries,
   getFloorsForLibrary,
+  demoLibrary,
+  demoFloor,
 } from "../data/mockLocations";
+
+/** All libraries including the standalone demo */
+const allLibraries = [...libraries, demoLibrary];
+
+/** Floor lookup that also knows about the demo floor */
+function allFloorsForLibrary(libraryId: string) {
+  if (libraryId === demoLibrary.id) return [demoFloor];
+  return getFloorsForLibrary(libraryId);
+}
 
 export interface LocationSelection {
   libraryId: string;
@@ -27,15 +38,15 @@ function writeToURL(sel: LocationSelection) {
 
 function resolveDefaults(partial: Partial<LocationSelection>): LocationSelection {
   const libraryId =
-    partial.libraryId && libraries.some((l) => l.id === partial.libraryId)
+    partial.libraryId && allLibraries.some((l) => l.id === partial.libraryId)
       ? partial.libraryId
-      : libraries[0].id;
+      : allLibraries[0].id;
 
-  const availableFloors = getFloorsForLibrary(libraryId);
+  const floors = allFloorsForLibrary(libraryId);
   const floorId =
-    partial.floorId && availableFloors.some((f) => f.id === partial.floorId)
+    partial.floorId && floors.some((f) => f.id === partial.floorId)
       ? partial.floorId
-      : availableFloors[0].id;
+      : floors[0].id;
 
   return { libraryId, floorId };
 }
@@ -53,8 +64,8 @@ export function useLocationSelection() {
   const setLibrary = useCallback((libraryId: string) => {
     setSelection((prev) => {
       if (prev.libraryId === libraryId) return prev;
-      const availableFloors = getFloorsForLibrary(libraryId);
-      const floorId = availableFloors[0]?.id ?? "";
+      const floors = allFloorsForLibrary(libraryId);
+      const floorId = floors[0]?.id ?? "";
       return { libraryId, floorId };
     });
   }, []);
@@ -66,13 +77,13 @@ export function useLocationSelection() {
   }, []);
 
   const availableFloors = useMemo(
-    () => getFloorsForLibrary(selection.libraryId),
+    () => allFloorsForLibrary(selection.libraryId),
     [selection.libraryId]
   );
 
   return {
     selection,
-    libraries,
+    libraries: allLibraries,
     availableFloors,
     setLibrary,
     setFloor,

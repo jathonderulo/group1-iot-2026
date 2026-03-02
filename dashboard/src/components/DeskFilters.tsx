@@ -15,7 +15,7 @@ interface DeskFiltersProps {
 const STATUS_OPTIONS: { value: OccupancyStatus; label: string; color: string; darkColor: string }[] = [
   { value: "available", label: "Available", color: "bg-emerald-100 text-emerald-700 ring-emerald-300", darkColor: "dark:bg-emerald-900/40 dark:text-emerald-300 dark:ring-emerald-700" },
   { value: "occupied", label: "Occupied", color: "bg-red-100 text-red-700 ring-red-300", darkColor: "dark:bg-red-900/40 dark:text-red-300 dark:ring-red-700" },
-  { value: "unsure", label: "Unsure", color: "bg-yellow-100 text-yellow-700 ring-yellow-300", darkColor: "dark:bg-yellow-900/40 dark:text-yellow-300 dark:ring-yellow-700" },
+  { value: "reserved", label: "Reserved", color: "bg-yellow-100 text-yellow-700 ring-yellow-300", darkColor: "dark:bg-yellow-900/40 dark:text-yellow-300 dark:ring-yellow-700" },
 ];
 
 const NOISE_OPTIONS: { value: NoiseBand; label: string; color: string; darkColor: string }[] = [
@@ -119,7 +119,7 @@ export default function DeskFilters({
         </div>
 
         {/* Noise */}
-        <div>
+        {/* <div>
           <span className="text-[10px] font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500">
             Noise Level
           </span>
@@ -141,7 +141,7 @@ export default function DeskFilters({
               );
             })}
           </div>
-        </div>
+        </div> */}
 
         {/* Clear on mobile */}
         {hasActiveFilters && (

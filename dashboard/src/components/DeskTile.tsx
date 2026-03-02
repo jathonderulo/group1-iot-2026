@@ -9,7 +9,7 @@ interface DeskTileProps {
 const statusIconColors: Record<OccupancyStatus, { fill: string; stroke: string }> = {
   available: { fill: "#bbf7d0", stroke: "#16a34a" },
   occupied:  { fill: "#fca5a5", stroke: "#dc2626" },
-  unsure:    { fill: "#fef08a", stroke: "#ca8a04" },
+  reserved:    { fill: "#fef08a", stroke: "#ca8a04" },
 };
 
 /** Inline SVG desk + chair icon */
@@ -49,8 +49,8 @@ function DeskIcon({ status }: { status: OccupancyStatus }) {
       />
       {/* Chair seat connector */}
       <rect x="30" y="14" width="4" height="4" rx="1" fill={stroke} />
-      {/* Unsure indicator — question mark dot */}
-      {status === "unsure" && (
+      {/* Reserved indicator — question mark dot */}
+      {status === "reserved" && (
         <text
           x="32"
           y="36"
@@ -96,7 +96,7 @@ export default function DeskTile({ desk, isSelected, onSelect }: DeskTileProps) 
             : "border-gray-200 shadow-sm dark:border-gray-700"
         }
       `}
-      aria-label={`Desk ${desk.deskId}, ${{ available: "Available", occupied: "Occupied", unsure: "Unsure" }[desk.status]}`}
+      aria-label={`Desk ${desk.deskId}, ${{ available: "Available", occupied: "Occupied", reserved: "Reserved" }[desk.status]}`}
     >
       <DeskIcon status={desk.status} />
 
@@ -106,21 +106,21 @@ export default function DeskTile({ desk, isSelected, onSelect }: DeskTileProps) 
         className={`mt-1.5 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
           desk.status === "occupied"
             ? "bg-red-50 text-red-600 ring-1 ring-red-200 dark:bg-red-900/40 dark:text-red-300 dark:ring-red-700"
-            : desk.status === "unsure"
+            : desk.status === "reserved"
             ? "bg-yellow-50 text-yellow-700 ring-1 ring-yellow-300 dark:bg-yellow-900/40 dark:text-yellow-300 dark:ring-yellow-700"
             : "bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:ring-emerald-700"
         }`}
       >
-        {{ available: "Available", occupied: "Occupied", unsure: "Unsure" }[desk.status]}
+        {{ available: "Available", occupied: "Occupied", reserved: "Reserved" }[desk.status]}
       </span>
 
-      <span
+      {/* <span
         className={`mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
           noiseBandColorDark[desk.noiseband] ?? "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400"
         }`}
       >
         {desk.noiseband}
-      </span>
+      </span> */}
     </button>
   );
 }

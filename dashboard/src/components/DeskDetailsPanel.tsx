@@ -86,18 +86,18 @@ export default function DeskDetailsPanel({
                 className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium ${
                   desk.status === "occupied"
                     ? "bg-red-50 text-red-600 ring-1 ring-red-200 dark:bg-red-900/40 dark:text-red-300 dark:ring-red-700"
-                    : desk.status === "unsure"
+                    : desk.status === "reserved"
                     ? "bg-yellow-50 text-yellow-700 ring-1 ring-yellow-300 dark:bg-yellow-900/40 dark:text-yellow-300 dark:ring-yellow-700"
                     : "bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:ring-emerald-700"
                 }`}
               >
-                {{ available: "Available", occupied: "Occupied", unsure: "Unsure — may return" }[desk.status]}
+                {{ available: "Available", occupied: "Occupied", reserved: "Reserved" }[desk.status]}
               </span>
             </div>
           </div>
 
           {/* Noise band chip */}
-          <div>
+          {/* <div>
             <span className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
               Noise Level
             </span>
@@ -109,22 +109,22 @@ export default function DeskDetailsPanel({
                   desk.noiseband.slice(1)}
               </span>
             </div>
-          </div>
+          </div> */}
 
           {/* Time info */}
           <div>
             <span className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
               {desk.status === "occupied"
                 ? "Occupied Since"
-                : desk.status === "unsure"
-                ? "Unsure Since"
+                : desk.status === "reserved"
+                ? "Reserved Since"
                 : "Last Occupied"}
             </span>
             <p className="mt-1 text-sm text-gray-700 dark:text-gray-300">
               {desk.status === "occupied"
                 ? timeAgo(desk.occupiedSince)
-                : desk.status === "unsure"
-                ? timeAgo(desk.unsureSince)
+                : desk.status === "reserved"
+                ? timeAgo(desk.reservedSince)
                 : timeAgo(desk.lastOccupiedAt)}
             </p>
           </div>

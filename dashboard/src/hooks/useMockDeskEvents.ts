@@ -12,7 +12,7 @@ function randomInitialStatus(): OccupancyStatus {
   const r = Math.random();
   if (r < 0.4) return "available";
   if (r < 0.75) return "occupied";
-  return "unsure";
+  return "reserved";
 }
 
 /** Generate desks for ALL floors once so state persists across floor switches */
@@ -31,8 +31,8 @@ function generateAllDesks(): DeskState[] {
           status === "occupied"
             ? new Date(now.getTime() - Math.random() * 3600000).toISOString()
             : undefined,
-        unsureSince:
-          status === "unsure"
+        reservedSince:
+          status === "reserved"
             ? new Date(now.getTime() - Math.random() * 1800000).toISOString()
             : undefined,
         lastOccupiedAt:
@@ -54,8 +54,8 @@ function applyRandomUpdate(desks: DeskState[]): DeskState[] {
 
   // Transitions follow the valid state machine:
   //   available  → occupied
-  //   occupied   → unsure
-  //   unsure     → available | occupied
+  //   occupied   → reserved
+  //   reserved   → available 
   if (desk.status === "available") {
     if (rand < 0.4) {
       desk.status = "occupied";
@@ -64,21 +64,21 @@ function applyRandomUpdate(desks: DeskState[]): DeskState[] {
     }
   } else if (desk.status === "occupied") {
     if (rand < 0.45) {
-      desk.status = "unsure";
-      desk.unsureSince = now;
+      desk.status = "reserved";
+      desk.reservedSince = now;
       desk.occupiedSince = undefined;
     }
-  } else if (desk.status === "unsure") {
+  } else if (desk.status === "reserved") {
     if (rand < 0.45) {
       // Person confirmed gone
       desk.status = "available";
       desk.lastOccupiedAt = now;
-      desk.unsureSince = undefined;
+      desk.reservedSince = undefined;
     } else if (rand < 0.75) {
       // Person came back
       desk.status = "occupied";
       desk.occupiedSince = now;
-      desk.unsureSince = undefined;
+      desk.reservedSince = undefined;
     }
   }
 
