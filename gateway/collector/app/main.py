@@ -1,17 +1,72 @@
 import json
 import os
+import ssl
 import time
 from typing import Any, Dict, Optional
 import paho.mqtt.client as mqtt
 import requests
 
-MQTT_HOST = os.getenv("MQTT_HOST", "mosquitto")
-MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+MQTT_HOST = os.getenv("MQTT_HOST", "gateway-mqtt")
+MQTT_PORT = int(os.getenv("MQTT_PORT", "8883"))
 MQTT_TOPIC = os.getenv("MQTT_TOPIC", "desks/+/state")
+MQTT_USER = os.getenv("MQTT_USER")
+MQTT_PASS = os.getenv("MQTT_PASS")
+MQTT_CA_CERT = os.getenv("MQTT_CA_CERT")
 
 # Optional: forward to EC2 later
 EC2_INGEST_URL = os.getenv("EC2_INGEST_URL")
 EC2_TOKEN = os.getenv("EC2_TOKEN")           
+
+def _extract_common_name(cert: dict) -> str:
+    for rdn in cert.get("subject", []):
+        for key, value in rdn:
+            if key == "commonName":
+                return value
+    return "unknown"
+
+def _extract_san(cert: dict) -> str:
+    sans = cert.get("subjectAltName", [])
+    if not sans:
+        return "none"
+    return ",".join(f"{name_type}:{name_value}" for name_type, name_value in sans)
+
+def log_tls_handshake(client: mqtt.Client):
+    sock = client.socket()
+    if sock is None:
+        print("[collector][tls] Handshake details unavailable (no active socket)")
+        return
+
+    tls_version = "unknown"
+    cipher_name = "unknown"
+    peer_cn = "unknown"
+    peer_san = "none"
+
+    if hasattr(sock, "version"):
+        try:
+            tls_version = sock.version() or "unknown"
+        except ssl.SSLError:
+            pass
+
+    if hasattr(sock, "cipher"):
+        try:
+            cipher = sock.cipher()
+            if cipher:
+                cipher_name = f"{cipher[0]}/{cipher[1]}"
+        except ssl.SSLError:
+            pass
+
+    if hasattr(sock, "getpeercert"):
+        try:
+            cert = sock.getpeercert() or {}
+            peer_cn = _extract_common_name(cert)
+            peer_san = _extract_san(cert)
+        except ssl.SSLError:
+            pass
+
+    print(
+        f"[collector][tls] Handshake complete version={tls_version} cipher={cipher_name} "
+        f"peer_cn={peer_cn} peer_san={peer_san}"
+    )
 
 
 def validate_payload(topic: str, payload: Dict[str, Any]) -> Optional[str]:
@@ -63,10 +118,13 @@ def validate_payload(topic: str, payload: Dict[str, Any]) -> Optional[str]:
 def on_connect(client, userdata, flags, reason_code, properties):
     # In V2, reason_code.is_failure can be used, or just compare to 0
     if reason_code == 0:
+        print(f"[collector][auth] CONNACK accepted username={MQTT_USER}")
+        log_tls_handshake(client)
         print(f"[collector] Connected to MQTT broker at {MQTT_HOST}:{MQTT_PORT}")
         client.subscribe(MQTT_TOPIC)
         print(f"[collector] Subscribed to topic: {MQTT_TOPIC}")
     else:
+        print(f"[collector][auth] CONNACK rejected username={MQTT_USER} code={reason_code}")
         print(f"[collector] MQTT connect failed with code={reason_code}")
 
 
@@ -109,7 +167,6 @@ def forward_to_ec2(topic: str, payload: Dict[str, Any]) -> None:
 
     api_payload = {
         "desk_id": desk_id,
-        # Prefer API-native keys if present, otherwise map from your MQTT schema
         "person_present": bool(payload.get("person_present", payload.get("occupied", False))),
         "stuff_on_desk": bool(payload.get("stuff_on_desk", False)),
     }
@@ -135,8 +192,22 @@ def main():
 
     client.reconnect_delay_set(min_delay=1, max_delay=30)
 
-    # for later broker user/pass
-    # client.username_pw_set(os.getenv("MQTT_USER"), os.getenv("MQTT_PASS"))
+    if not MQTT_USER or not MQTT_PASS:
+        raise RuntimeError("MQTT_USER and MQTT_PASS are required (broker has allow_anonymous=false).")
+
+    client.username_pw_set(MQTT_USER, MQTT_PASS)
+    print("[collector][auth] MQTT CONNECT sending username=" + MQTT_USER + " client_id=collector")
+
+    use_tls = bool(MQTT_CA_CERT) or MQTT_PORT == 8883
+    if use_tls:
+        ca_cert = MQTT_CA_CERT or "/certs/ca.crt"
+        client.tls_set(
+            ca_certs=ca_cert,
+            certfile=None,
+            keyfile=None,
+            tls_version=ssl.PROTOCOL_TLS_CLIENT,
+        )
+        print(f"[collector][tls] TLS configured cafile={ca_cert} host={MQTT_HOST}")
 
     client.on_connect = on_connect
     client.on_message = on_message

@@ -3,7 +3,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 
 class Handler(BaseHTTPRequestHandler):
-    def do_POST(self):
+    def _handle_ingest(self):
         length = int(self.headers.get("Content-Length", "0"))
         raw = self.rfile.read(length).decode("utf-8", errors="replace")
         try:
@@ -19,6 +19,12 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(response)))
         self.end_headers()
         self.wfile.write(response)
+
+    def do_POST(self):
+        self._handle_ingest()
+
+    def do_PUT(self):
+        self._handle_ingest()
 
     def log_message(self, fmt, *args):
         return
