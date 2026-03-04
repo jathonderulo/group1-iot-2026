@@ -27,11 +27,6 @@ CHANGE_PROB = float(os.getenv("CHANGE_PROB", "0.35"))
 PUBLISH_MODE = os.getenv("PUBLISH_MODE", "on_change")  # on_change|periodic
 PERIODIC_MS = int(os.getenv("PERIODIC_MS", "5000"))
 
-# TLS hostname verification:
-# Best practice: MQTT_HOST should be a DNS name present in broker cert SAN.
-# If you connect by IP but cert SAN is DNS-only, verification will fail.
-TLS_INSECURE = os.getenv("TLS_INSECURE", "false").lower() == "true"
-
 def _extract_common_name(cert: dict) -> str:
     for rdn in cert.get("subject", []):
         for key, value in rdn:
@@ -128,14 +123,13 @@ def main():
         keyfile=None,
         tls_version=ssl.PROTOCOL_TLS_CLIENT,
     )
-    client.tls_insecure_set(TLS_INSECURE)
 
     client.on_connect = on_connect
     client.on_disconnect = on_disconnect
     client.reconnect_delay_set(min_delay=1, max_delay=30)
 
     print(f"[mock-esp32][auth] MQTT CONNECT sending username={MQTT_USER} client_id={client._client_id.decode(errors='ignore')}")
-    print(f"[mock-esp32][tls] TLS configured cafile={CA_CERT} host={MQTT_HOST} insecure={TLS_INSECURE}")
+    print(f"[mock-esp32][tls] TLS configured cafile={CA_CERT} host={MQTT_HOST}")
     print(f"[mock-esp32] Connecting mqtts://{MQTT_HOST}:{MQTT_PORT} as user={MQTT_USER}")
     client.connect(MQTT_HOST, MQTT_PORT, keepalive=60)
     client.loop_start()

@@ -10,7 +10,7 @@ BROKER_KEY="$CERT_DIR/broker.key"
 BROKER_CSR="$CERT_DIR/broker.csr"
 BROKER_CRT="$CERT_DIR/broker.crt"
 
-# Certificate subject fields (edit if you like)
+# Certificate subject fields
 CA_SUBJECT="${CA_SUBJECT:-/C=IE/O=CS7NS2/OU=IoT/CN=CS7NS2 IoT CA}"
 BROKER_SUBJECT="${BROKER_SUBJECT:-/C=IE/O=CS7NS2/OU=Gateway/CN=gateway-mqtt}"
 
@@ -19,8 +19,7 @@ CA_DAYS="${CA_DAYS:-3650}"
 BROKER_DAYS="${BROKER_DAYS:-30}"     # short-lived is fine for dev/demo
 
 # Which IP should be placed in SAN?
-# - For hotspot demos, LAN IP is usually best (ESP32 reaches laptop via LAN)
-# - For public internet, you'd need public IP + port forwarding (rare on mobile)
+# For hotspot demos, LAN IP is usually best (ESP32 reaches laptop via LAN)
 IP_MODE="${IP_MODE:-lan}"           # lan | public | custom
 CUSTOM_IP="${CUSTOM_IP:-}"
 
@@ -31,7 +30,7 @@ EXTRA_DNS="${EXTRA_DNS:-}"
 # ====== Helpers ======
 get_lan_ip() {
   # Try to get the primary LAN IP (Linux/macOS). Works well in most cases.
-  # If you have multiple interfaces, you can set IP_MODE=custom and CUSTOM_IP=...
+  # If you have multiple interfaces, set IP_MODE=custom and CUSTOM_IP=...
   if command -v ip >/dev/null 2>&1; then
     ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}'
   elif command -v route >/dev/null 2>&1; then
@@ -85,7 +84,7 @@ ensure_ca() {
   openssl req -x509 -new -nodes -key "$CA_KEY" -sha256 -days "$CA_DAYS" \
     -subj "$CA_SUBJECT" -out "$CA_CRT"
   echo "[ok] Created CA cert: $CA_CRT"
-  echo "     IMPORTANT: Copy $CA_CRT to your ESP32/mock trust store once."
+  echo "     IMPORTANT: Copy $CA_CRT to ESP32/mock trust store once."
 }
 
 make_san_file() {
