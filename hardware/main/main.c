@@ -13,11 +13,6 @@
 #define PIN_G GPIO_NUM_3
 #define PIN_B GPIO_NUM_10
 
-#define WIFI_SSID "Yup tallaght"
-#define WIFI_PASS "shlabbie"
-#define MQTT_BROKER_URI "mqtts://192.168.154.242:1883"  // Use your gateway IP
-#define MQTT_TOPIC "desks/1/state"
-
 static const char *TAG = "ESP32_LED";
 static EventGroupHandle_t s_wifi_event_group;
 static esp_mqtt_client_handle_t client;
