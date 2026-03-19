@@ -1,23 +1,36 @@
 services:
   mosquitto:
-    image: eclipse-mosquitto:2
+    build:
+      context: ./mosquitto
+      dockerfile: Dockerfile
     ports:
-      - "1883:1883"
+      # MQTT over TLS
+      - "8883:8883"
     volumes:
-      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./certs/ca.crt:/mosquitto/certs/ca.crt:ro
+      - ./certs/broker.crt:/mosquitto/certs/broker.crt:ro
+      - ./certs/broker.key:/mosquitto/certs/broker.key:ro
+    networks:
+      default:
+        aliases:
+          # rotate_certs.sh includes gateway-mqtt in broker cert SAN by default
+          - gateway-mqtt
     restart: unless-stopped
 
   collector:
     build: ./collector
     volumes:
       - ./collector/app:/app/app
+      - ./certs/ca.crt:/certs/ca.crt:ro
     environment:
       - MQTT_HOST=${MQTT_HOST}
       - MQTT_PORT=${MQTT_PORT}
       - MQTT_TOPIC=${MQTT_TOPIC}
-      # later:
-      # - EC2_INGEST_URL=${EC2_INGEST_URL}
-      # - EC2_TOKEN=${EC2_TOKEN}
+      - MQTT_USER=${MQTT_COLLECTOR_USER}
+      - MQTT_PASS=${MQTT_COLLECTOR_PASS}
+      - MQTT_CA_CERT=${MQTT_CA_CERT}
+      - EC2_INGEST_URL=${EC2_INGEST_URL:-}
     depends_on:
       - mosquitto
     restart: unless-stopped

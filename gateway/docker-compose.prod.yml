@@ -1,0 +1,55 @@
+services:
+  mosquitto:
+    build:
+      context: ./mosquitto
+      dockerfile: Dockerfile
+    image: ${MOSQUITTO_IMAGE}
+    ports:
+      # MQTT over TLS (no plaintext 1883)
+      - "${MQTT_HOST_PORT}:8883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./certs/ca.crt:/mosquitto/certs/ca.crt:ro
+      - ./certs/broker.crt:/mosquitto/certs/broker.crt:ro
+      - ./certs/broker.key:/mosquitto/certs/broker.key:ro
+      - mosquitto_data:/mosquitto/data
+    networks:
+      default:
+        aliases:
+          - gateway-mqtt
+    restart: unless-stopped
+
+  forwarder:
+    build:
+      context: .
+      dockerfile: forwarder/Dockerfile
+    environment:
+      - LISTEN_PORT=${LISTEN_PORT:?LISTEN_PORT is required}
+      - EC2_HOST=${EC2_HOST:?EC2_HOST is required}
+      - EC2_PORT=${EC2_PORT:?EC2_PORT is required}
+    depends_on:
+      - mosquitto
+    restart: unless-stopped
+
+  collector:
+    build: ./collector
+    volumes:
+      - ./certs/ca.crt:/certs/ca.crt:ro
+    environment:
+      - MQTT_HOST=${MQTT_HOST:?MQTT_HOST is required}
+      - MQTT_PORT=${MQTT_PORT:?MQTT_PORT is required}
+      - MQTT_TOPIC=${MQTT_TOPIC:?MQTT_TOPIC is required}
+      - MQTT_USER=${MQTT_COLLECTOR_USER:?MQTT_COLLECTOR_USER is required}
+      - MQTT_PASS=${MQTT_COLLECTOR_PASS:?MQTT_COLLECTOR_PASS is required}
+      - MQTT_CA_CERT=${MQTT_CA_CERT:?MQTT_CA_CERT is required}
+      - EC2_INGEST_URL=${EC2_INGEST_URL:?EC2_INGEST_URL is required}
+      #- EC2_TOKEN=${EC2_TOKEN:?EC2_TOKEN is required}
+    depends_on:
+      - mosquitto
+      - forwarder
+    restart: unless-stopped
+
+volumes:
+  mosquitto_data:
+
+# docker compose -f docker-compose.prod.yml up --build

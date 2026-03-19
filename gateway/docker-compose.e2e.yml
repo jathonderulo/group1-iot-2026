@@ -1,0 +1,63 @@
+services:
+  mosquitto:
+    ports:
+      - "8883:8883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./certs/ca.crt:/mosquitto/certs/ca.crt:ro
+      - ./certs/broker.crt:/mosquitto/certs/broker.crt:ro
+      - ./certs/broker.key:/mosquitto/certs/broker.key:ro
+    networks:
+      default:
+        aliases:
+          - gateway-mqtt
+    restart: unless-stopped
+
+  forwarder:
+    build:
+      context: .
+      dockerfile: forwarder/Dockerfile
+    environment:
+      - LISTEN_PORT=${LISTEN_PORT:?LISTEN_PORT is required for e2e}
+      - EC2_HOST=${EC2_HOST:?EC2_HOST is required for e2e}
+      - EC2_PORT=${EC2_PORT:?EC2_PORT is required for e2e}
+    depends_on:
+      - mock-ec2
+    restart: unless-stopped
+
+  mock-ec2:
+    build: ./mock-ec2
+    restart: unless-stopped
+
+  mock-esp32:
+    build: ./mock-esp32
+    volumes:
+      - ./certs/ca.crt:/certs/ca.crt:ro
+    environment:
+      - MQTT_HOST=${MQTT_HOST:?MQTT_HOST is required for e2e}
+      - MQTT_PORT=${MQTT_PORT:?MQTT_PORT is required for e2e}
+      - MQTT_USER=${MQTT_USER:?MQTT_USER is required for e2e}
+      - MQTT_PASS=${MQTT_PASS:?MQTT_PASS is required for e2e}
+      - MQTT_CA_CERT=${MQTT_CA_CERT:?MQTT_CA_CERT is required for e2e}
+      - DEVICE_ID=${MOCK_DEVICE_ID:?MOCK_DEVICE_ID is required for e2e}
+      - MQTT_TOPIC=${MOCK_MQTT_TOPIC:?MOCK_MQTT_TOPIC is required for e2e}
+      #- PUBLISH_MODE=periodic
+      - PERIODIC_MS=1000
+      - TLS_INSECURE=false
+    depends_on:
+      - mosquitto
+    restart: unless-stopped
+
+  collector:
+    environment:
+      - MQTT_HOST=${MQTT_HOST:?MQTT_HOST is required for e2e}
+      - MQTT_PORT=${MQTT_PORT:?MQTT_PORT is required for e2e}
+      - MQTT_TOPIC=${MQTT_TOPIC:?MQTT_TOPIC is required for e2e}
+      - MQTT_USER=${MQTT_COLLECTOR_USER:?MQTT_COLLECTOR_USER is required for e2e}
+      - MQTT_PASS=${MQTT_COLLECTOR_PASS:?MQTT_COLLECTOR_PASS is required for e2e}
+      - MQTT_CA_CERT=${MQTT_CA_CERT:?MQTT_CA_CERT is required for e2e}
+      - EC2_INGEST_URL=${EC2_INGEST_URL:?EC2_INGEST_URL is required for e2e}
+    depends_on:
+      - mosquitto
+      - forwarder
+      - mock-esp32

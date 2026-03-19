@@ -2,3 +2,6 @@
 __pycache__/
 .env
 .vscode/
+.env.e2e
+certs/
+passwordfile
