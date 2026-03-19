@@ -82,7 +82,7 @@ def now_ts() -> int:
     return int(time.time())
 
 def make_payload(occupied: bool) -> str:
-    payload = {"device_id": DEVICE_ID, "occupied": occupied, "ts": now_ts()}
+    payload = {"device_id": DEVICE_ID, "person_present": occupied, "stuff_on_desk": False, "ts": now_ts()}
     return json.dumps(payload, separators=(",", ":"))
 
 def on_connect(client, userdata, flags, reason_code, properties):
