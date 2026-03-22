@@ -139,10 +139,10 @@ def on_message(client: mqtt.Client, userdata, msg: mqtt.MQTTMessage):
         print(f"[collector] Reject (invalid JSON) topic={topic} payload={raw}")
         return
 
-    #err = validate_payload(topic, payload)
-    # if err:
-        # print(f"[collector] Reject ({err}) topic={topic} payload={payload}")
-        # return
+    err = validate_payload(topic, payload)
+    if err:
+        print(f"[collector] Reject ({err}) topic={topic} payload={payload}")
+        return
 
     # add timestamp if missing
     if "ts" not in payload:
@@ -160,7 +160,7 @@ def forward_to_ec2(topic: str, payload: Dict[str, Any]) -> None:
     desk_id_raw = parts[1] if len(parts) == 3 else payload.get("desk_id")
 
     try:
-        desk_id = int(desk_id_raw)
+        desk_id = desk_id_raw
     except (TypeError, ValueError):
         print(f"[collector] Forward reject: invalid desk_id={desk_id_raw} topic={topic}")
         return
