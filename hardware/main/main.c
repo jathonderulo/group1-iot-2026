@@ -1,3 +1,7 @@
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
@@ -12,6 +16,17 @@
 #define PIN_R GPIO_NUM_2
 #define PIN_G GPIO_NUM_3
 #define PIN_B GPIO_NUM_10
+
+#define WIFI_SSID "Yup Tallaght"
+#define WIFI_PASS "st5TB78V006?"
+
+#define MQTT_BROKER_URI "mqtts://192.168.154.242:8883"
+#define MQTT_TOPIC "desks/1/state"
+#define MQTT_USER "desk01"
+#define MQTT_PASSWD "$7$1000$QI0dqAbbmzdsDJZiKxiNVh5+YMOZAzkWFPnQEmgNKoD8k3qwLtj2yBFM/rBc+fGl8yH/yW0yr7jAfVLfHpR2/A==$yH6ipOnZrSE6MKiFlLujpoviZbXu06weHlyZFgYg3GkWucp7k1lbSuP6DuRXJVOkEXvhpfuGMiMCB9P7qu3j3Q=="
+
+extern const uint8_t mqtt_ca_crt_start[] asm("_binary_certs_ca_crt_start");
+extern const uint8_t mqtt_ca_crt_end[] asm("_binary_certs_ca_crt_end");
 
 static const char *TAG = "ESP32_LED";
 static EventGroupHandle_t s_wifi_event_group;
@@ -108,6 +123,14 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         break;
     case MQTT_EVENT_ERROR:
         ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
+        if (event->error_handle != NULL) {
+            ESP_LOGI(TAG,
+                     "Last esp_err=0x%x tls_stack=0x%x tls_cert_flags=0x%x transport_sock_errno=%d",
+                     event->error_handle->esp_tls_last_esp_err,
+                     event->error_handle->esp_tls_stack_err,
+                     event->error_handle->esp_tls_cert_verify_flags,
+                     event->error_handle->esp_transport_sock_errno);
+        }
         break;
     default:
         ESP_LOGI(TAG, "Other event id:%d", event->event_id);
@@ -118,9 +141,16 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 // MQTT initialization
 static void mqtt_init(void)
 {
+    size_t ca_len = (size_t)(mqtt_ca_crt_end - mqtt_ca_crt_start);
+    ESP_LOGI(TAG, "MQTT TLS CA loaded (%u bytes)", (unsigned int)ca_len);
+
     esp_mqtt_client_config_t mqtt_cfg = {
         .broker.address.uri = MQTT_BROKER_URI,
+        .broker.verification.certificate = (const char *)mqtt_ca_crt_start,
+        .credentials.username = MQTT_USER,
+        .credentials.authentication.password = MQTT_PASSWD,
     };
+
     client = esp_mqtt_client_init(&mqtt_cfg);
     esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
     esp_mqtt_client_start(client);
@@ -131,8 +161,8 @@ static void mqtt_publish_task(void *pvParameter)
 {
     char payload[256];
     while (1) {
-        /* always publish current state every 5 seconds */
-        snprintf(payload, sizeof(payload), "{\"person_present\": %d, \"stuff_on_desk\": %d}", 
+        /* always publish current state every 5 seconds */
+        snprintf(payload, sizeof(payload), "{\"person_present\": %d, \"stuff_on_desk\": %d}",
                  seat_occupied, seat_occupied);
         esp_mqtt_client_publish(client, MQTT_TOPIC, payload, 0, 1, 0);
         ESP_LOGI(TAG, "Published: %s on topic %s", payload, MQTT_TOPIC);

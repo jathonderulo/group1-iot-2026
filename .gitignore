@@ -5,3 +5,4 @@ __pycache__/
 .env.e2e
 certs/
 passwordfile
+build/
